@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場モニター (Anti-Gravity Dynamic Cockpit V5.0)</title>
+    <!-- スマホでアイコン起動した時に「強制フルスクリーン・横画面」にするためのルールブック -->
+    <link rel="manifest" href="/manifest.json">
+    <!-- 🗺️ 動く地図システム（Leaflet）の読み込み -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 📘 見た目デザイン（CSS）を別ファイルから読み込み -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+ 
+    <!-- 左サイドバー -->
+    <div class="sidebar">
+        <!-- 3つのボタンコントロールグループ -->
+        <div class="controls-group">
+            <span class="section-title">Operations</span>
+            
+            <!-- ① カメラ切り替え (フロント ➔ リア ➔ 地図の3段ループトグル) -->
+            <button id="btn-camera" class="nav-btn" onclick="rotateViewMode()">📸 フロント映像</button>
+            
+            <!-- ② SDカードへ保存 (最初は無効) -->
+            <button id="btn-export" class="export-btn" onclick="exportToSD()" disabled>💾 チェックした動画を保存</button>
+            
+            <!-- ③ ファイル選択 (RAW塊を選ぶ) -->
+            <!-- ④ 第3段階：時間指定スナイプ抽出モジュール -->
+            <div id="time-picker-block" class="time-picker-module" style="margin-bottom: 20px;">
+                <span class="section-title" style="white-space: nowrap;">🎯スナイプ抽出(時間指定)</span>
+                <div style="font-size: 0.75em; color: var(--warning); margin-bottom: 8px; font-weight: bold; white-space: nowrap;">＊必ず時間指定してください</div>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-size: 0.7em; color: #aaa;">開始:</span>
+                    <input type="datetime-local" id="time-start" class="time-input" />
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <span style="font-size: 0.7em; color: #aaa;">終了:</span>
+                    <input type="datetime-local" id="time-end" class="time-input" />
+                </div>
+            </div>
+
+            <button id="btn-select" class="select-btn" onclick="runSelectAnimation()">📁 ファイル指定</button>
+        </div>
+
+ 
+        <!-- 中間のローディングアニメーション -->
+        <div id="loading-panel" class="loading-panel">
+            <div class="spinner"></div>
+            <div id="loading-msg" style="font-size: 0.8em; color: var(--accent); font-family: monospace;">塊データを解析中...</div>
+        </div>
+ 
+        <!-- 動的に出現する、指でスクロール可能な時間指定リストボックス -->
+        <div id="list-box-container" class="list-box-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="section-title" style="line-height: 1.4;">Playlist<br>(時間指定)</span>
+                <button id="btn-toggle-all" onclick="toggleSelectAll()" style="background: rgba(80,80,80,0.8); color: #fff; border: 1px solid #555; border-radius: 4px; padding: 3px 8px; font-size: 0.7em; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0;">全選択</button>
+            </div>
+            <div id="playlist-container" class="list-box">
+                <!-- ここにスリム化された運行時間ボタンが動的に生成されます -->
+            </div>
+        </div>
+    </div>
+ 
+    <!-- 右メインエリア -->
+    <div class="main-area">
+        <!-- プレースホルダー画面 -->
+        <div id="placeholder" class="video-placeholder">
+            <span class="placeholder-icon">🚖</span>
+            <div style="font-size: 1.2em; font-weight: bold; color: #888;">現場モニター ENGINE ACTIVE</div>
+            <div style="font-size: 0.9em; color: #555; max-width: 400px; line-height: 1.6;">
+                SDカードの塊ファイル（0KBフォルダ）を指定して、映像ファイルをスキャン・再生してください。
+            </div>
+        </div>
+ 
+        <div class="video-container" style="width: 100%; height: 100%; position: relative;">
+            
+            <!-- 🗺️ 動く運行地図 (通常は非表示、3ステップトグルでアクティブ化) -->
+            <div id="map"></div>
+
+            <!-- HUD上部 -->
+            <div id="hud-top" class="telemetry-bar">
+                <div class="telemetry-item">
+                    <span class="telemetry-label">TIME</span>
+                    <span class="val" id="disp-time">--:--:--</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">SPEED</span>
+                    <span><span class="val" id="disp-speed">0</span> km/h</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">GPS (LAT, LON)</span>
+                    <span class="val" id="disp-gps">---.---, ---.---</span>
+                </div>
+            </div>
+ 
+            <video id="player" playsinline autoplay></video>
+ 
+            <!-- HUD下部 -->
+            <div id="hud-bottom" class="video-controls">
+                <div class="seek-container">
+                    <span id="curr-time">0:00</span>
+                    <input type="range" id="seek-bar" value="0" step="0.1">
+                    <span id="total-time">0:00</span>
+                </div>
+                <div class="playback-buttons">
+                    <select id="speed-select" onchange="changeSpeed(this.value)">
+                        <option value="1.0">1.0x (標準)</option>
+                        <option value="1.25">1.25x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="1.75">1.75x</option>
+                        <option value="2.0">2.0x</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フォルダ選択モーダル -->
+    <div id="folder-modal-overlay" class="modal-overlay">
+        <div class="folder-modal">
+            <div class="modal-header">
+                <span class="modal-title">📁 フォルダを選択</span>
+                <button class="modal-close" onclick="closeFolderModal()">×</button>
+            </div>
+            <div id="current-path-display" class="current-path-display">/</div>
+            <div id="folder-list" class="folder-list">
+                <!-- フォルダ一覧がここに入ります -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeFolderModal()">キャンセル</button>
+                <button class="btn-confirm" onclick="confirmFolderSelection()">このフォルダを開く</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📗 動きのプログラム（JavaScript）を別ファイルから読み込み -->
+    <script src="app.js"></script>
+</body>
+</html>

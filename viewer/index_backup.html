@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場モニター (Anti-Gravity Dynamic Cockpit V5.0)</title>
+    <!-- スマホでアイコン起動した時に「強制フルスクリーン・横画面」にするためのルールブック -->
+    <link rel="manifest" href="/manifest.json?v=2">
+    <!-- 🗺️ 動く地図システム（Leaflet）の読み込み -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 🔤 Google Fonts (モダンなOutfitとデジタル時計風のShare Tech Mono) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #05060b;
+            --panel-bg: rgba(15, 18, 32, 0.75);
+            --accent: #00e5ff;
+            --accent-glow: rgba(0, 229, 255, 0.4);
+            --text-color: #f1f3f9;
+            --text-muted: #8a99ad;
+            --success: #00e676;
+            --success-glow: rgba(0, 230, 118, 0.4);
+            --warning: #ffd600;
+            --danger: #ff1744;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --card-hover: rgba(255, 255, 255, 0.04);
+            --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
+        }
+        body {
+            margin: 0; padding: 0; background-color: var(--bg-color); color: var(--text-color);
+            font-family: var(--font-main);
+            display: flex; flex-direction: row; height: 100vh; overflow: hidden;
+            touch-action: manipulation; /* 📱 ダブルタップズームによるクリック遅延を防止 */
+        }
+        
+        /* 左サイドバー（コントロール ＆ 解析ステータス） */
+        .sidebar {
+            width: 220px; /* ★220pxにスリム化し、余白を根絶 */
+            flex-shrink: 0;
+            background: var(--panel-bg); 
+            border-right: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex; flex-direction: column; z-index: 20;
+            padding: 12px; /* ★余白を12pxに詰め、表示面積を最大化 */
+            box-sizing: border-box;
+            gap: 12px;
+            overflow-y: auto; /* ★横画面で縦幅が足りない時でもスクロール可能に */
+        }
+        
+        /* カスタムスクロールバーの装飾 */
+        .sidebar::-webkit-scrollbar, .list-box::-webkit-scrollbar, .folder-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar::-webkit-scrollbar-track, .list-box::-webkit-scrollbar-track, .folder-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar::-webkit-scrollbar-thumb, .list-box::-webkit-scrollbar-thumb, .folder-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover, .list-box::-webkit-scrollbar-thumb:hover, .folder-list::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+        
+        .controls-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+  
+        .section-title {
+            font-size: 0.72em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 2px;
+            font-weight: 800;
+        }
+  
+        /* ボタン基本スタイル */
+        .nav-btn, .export-btn, .select-btn, .extract-btn {
+            width: 100%;
+            padding: 10px 12px; /* ★少し細身に調整 */
+            font-size: 0.9em;
+            font-weight: 700;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        
+        /* 各種ボタンの個性化カラー */
+        .nav-btn {
+            background: linear-gradient(135deg, #007aff, #005bb5);
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+        }
+        .nav-btn:hover {
+            box-shadow: 0 4px 20px rgba(0, 122, 255, 0.5);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .nav-btn.rear-active {
+            background: linear-gradient(135deg, #ff3b30, #c01a11);
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+        }
+        .nav-btn.rear-active:hover {
+            box-shadow: 0 4px 20px rgba(255, 59, 48, 0.5);
+        }
+        
+        .nav-btn.map-active {
+            background: linear-gradient(135deg, #5856d6, #3b30b5);
+            box-shadow: 0 4px 12px rgba(88, 86, 214, 0.3);
+        }
+        .nav-btn.map-active:hover {
+            box-shadow: 0 4px 20px rgba(88, 86, 214, 0.5);
+        }
+        
+        .export-btn {
+            background: linear-gradient(135deg, var(--success), #1b5e20);
+            box-shadow: 0 4px 12px rgba(0, 230, 118, 0.2);
+            border-color: rgba(0, 230, 118, 0.2);
+        }
+        .export-btn:not(:disabled):hover {
+            box-shadow: 0 4px 20px var(--success-glow);
+            border-color: var(--success);
+            transform: translateY(-2px);
+        }
+        .export-btn:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.2);
+            cursor: not-allowed;
+            box-shadow: none;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+  
+        .select-btn {
+            background: linear-gradient(135deg, #1f2937, #111827);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        .select-btn:hover {
+            background: linear-gradient(135deg, #374151, #1f2937);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 229, 255, 0.2);
+        }
+  
+        /* ローディングパネル */
+        .loading-panel {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 15px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .spinner {
+            width: 28px; height: 28px;
+            border: 3px solid rgba(255,255,255,0.05);
+            border-left-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s infinite cubic-bezier(0.5, 0.1, 0.4, 0.9);
+        }
+        
+        .time-picker-module {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 10px; /* パネル全体の余白をコンパクトに縮小 */
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 6px; /* 縦方向の空きを縮小 */
+        }
+        
+        .time-picker-module div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .time-input {
+            background: rgba(0, 0, 0, 0.5);
+            color: var(--accent);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 4px 6px; /* 余計な空白を排除し、文字が見えるギリギリの超タイト設定 */
+            font-family: var(--font-mono);
+            font-size: 0.85em; /* 文字がぴったり隠れず収まる最適な大きさ */
+            color-scheme: dark;
+            width: 100%;
+            box-sizing: border-box;
+            transition: all 0.3s;
+        }
+        
+        .time-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+            background: rgba(0, 0, 0, 0.8);
+        }
+  
+        /* 📱 指でスワイプスクロールできる時間指定リストボックス */
+        .list-box-container {
+            display: none;
+            flex-direction: column;
+            flex-grow: 1;
+            min-height: 250px; /* ★スマホ横画面でもリスト領域が潰れないように確保 */
+            overflow: hidden;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 12px;
+        }
+        .list-box {
+            flex-grow: 1;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 8px;
+            box-sizing: border-box;
+            -webkit-overflow-scrolling: touch;
+        }
+  
+        /* リストアイテム */
+        .list-item {
+            padding: 10px 12px; 
+            margin-bottom: 6px;
+            background-color: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            font-size: 0.85em;
+            color: #d1d5db;
+            cursor: pointer;
+            border-left: 4px solid transparent;
+            font-family: var(--font-mono);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .list-item:hover {
+            background-color: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            transform: translateX(2px);
+        }
+        .list-item.playing {
+            border-left-color: var(--accent);
+            color: #fff;
+            background-color: rgba(0, 229, 255, 0.08);
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+            font-weight: bold;
+            box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.05);
+        }
+        
+        /* 保存用チェックボックスのデザイン */
+        .save-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--success);
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        /* フォルダ選択モーダル */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 100;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .folder-modal {
+            background: #0d0f17; 
+            border: 1px solid rgba(255, 255, 255, 0.15); 
+            border-radius: 16px;
+            width: 90%; max-width: 500px; max-height: 80vh;
+            display: flex; flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            overflow: hidden;
+            animation: modalOpen 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        @keyframes modalOpen {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal-header {
+            padding: 18px; 
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-weight: 800; color: var(--accent); letter-spacing: 1px; }
+        .modal-close {
+            background: none; border: none; color: var(--text-muted); font-size: 1.6em; cursor: pointer; padding: 0 10px;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: #fff; }
+        .current-path-display {
+            padding: 12px 18px; background: rgba(0, 0, 0, 0.4); font-family: var(--font-mono);
+            font-size: 0.85em; color: var(--text-muted); word-break: break-all;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .folder-list {
+            flex-grow: 1; overflow-y: auto; padding: 15px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .folder-item {
+            padding: 12px 15px; margin-bottom: 8px; 
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+            transition: all 0.2s; font-size: 0.95em;
+        }
+        .folder-item:hover { 
+            background: rgba(0, 229, 255, 0.08); 
+            border-color: var(--accent);
+            transform: translateX(4px);
+        }
+        .modal-footer {
+            padding: 15px 18px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex; justify-content: flex-end; gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .btn-cancel {
+            padding: 10px 20px; background: rgba(255, 255, 255, 0.05); color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+        .btn-cancel:hover { background: rgba(255, 255, 255, 0.1); }
+        .btn-confirm {
+            padding: 10px 20px; background: linear-gradient(135deg, #007aff, #005bb5); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+            transition: all 0.2s;
+        }
+        .btn-confirm:hover { box-shadow: 0 4px 18px rgba(0, 122, 255, 0.5); transform: translateY(-1px); }
+ 
+        /* 右メインエリア（映像＆オーバーレイ） */
+        .main-area {
+            flex-grow: 1; position: relative; display: flex; flex-direction: column; background: #000;
+        }
+        .video-container {
+            flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center;
+            overflow: hidden;
+        }
+        video {
+            width: 100%; height: 100%; max-height: 100vh; object-fit: contain; cursor: pointer;
+            opacity: 0.3;
+            transition: opacity 0.5s, filter 0.3s;
+        }
+        
+        /* 🗺️ 地図の表示エリア */
+        #map {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: none;
+            background: #070913;
+            z-index: 2;
+        }
+ 
+        /* プレースホルダー画面 */
+        .video-placeholder {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 5;
+            background: radial-gradient(circle at center, #0f1220 0%, #030408 100%);
+            color: var(--text-muted);
+            font-family: var(--font-main);
+            text-align: center;
+            gap: 15px;
+        }
+        .placeholder-icon {
+            font-size: 5em;
+            filter: drop-shadow(0 0 15px rgba(255, 214, 0, 0.2));
+            animation: pulse 2s infinite alternate ease-in-out;
+        }
+        .placeholder-title {
+            font-size: 1.4em; 
+            font-weight: 800; 
+            color: #fff; 
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+ 
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.6; filter: drop-shadow(0 0 5px rgba(255, 214, 0, 0.1)); }
+            100% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 25px rgba(255, 214, 0, 0.4)); }
+        }
+ 
+        /* 証拠数字バー（HUD風オーバーレイ上部） */
+        .telemetry-bar {
+            position: absolute; top: 0; left: 0; width: 100%; z-index: 10;
+            display: flex; justify-content: space-between; padding: 20px 40px; box-sizing: border-box;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 60%, transparent 100%); 
+            font-family: var(--font-main);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .telemetry-item { display: flex; flex-direction: column; align-items: center; }
+        .telemetry-label { font-size: 0.7em; color: var(--text-muted); letter-spacing: 2px; margin-bottom: 4px; font-weight: 700; }
+        .val { color: var(--accent); font-family: var(--font-mono); font-weight: bold; font-size: 1.5em; text-shadow: 0 0 10px var(--accent-glow); }
+ 
+        /* コントロールパネル（HUD風オーバーレイ下部） */
+        .video-controls {
+            position: absolute; bottom: 0; left: 0; width: 100%; z-index: 10;
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 60%, transparent 100%); 
+            padding: 25px 40px; box-sizing: border-box;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .seek-container { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; font-family: var(--font-mono); font-size: 0.9em; }
+        #seek-bar { 
+            flex-grow: 1; 
+            accent-color: var(--accent); 
+            height: 6px; 
+            border-radius: 3px;
+            cursor: pointer; 
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            transition: background 0.3s;
+        }
+        #seek-bar:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .playback-buttons { display: flex; gap: 10px; justify-content: center; align-items: center; }
+        .playback-buttons select {
+            background: rgba(15, 23, 42, 0.8); 
+            color: #fff; 
+            border: 1px solid rgba(255, 255, 255, 0.15); 
+            border-radius: 8px; 
+            padding: 8px 18px; 
+            font-weight: 700; 
+            font-size: 0.9em; 
+            cursor: pointer; 
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: all 0.3s;
+            outline: none;
+        }
+        .playback-buttons select:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+ 
+        /* 📱 画面の高さが低い（Androidスマホの横向きなど）時に自動フィットさせる最高級レスポンシブ設定 */
+        @media (max-height: 600px) {
+            .sidebar {
+                width: 200px;
+                padding: 10px;
+                gap: 8px;
+            }
+            .controls-group {
+                gap: 8px;
+            }
+            .section-title {
+                font-size: 0.7em;
+            }
+            .nav-btn, .export-btn, .select-btn {
+                padding: 10px;
+                font-size: 0.85em;
+                border-radius: 8px;
+            }
+            .loading-panel {
+                padding: 8px;
+                gap: 5px;
+            }
+            .spinner {
+                width: 18px; height: 18px;
+            }
+            .list-box-container {
+                padding-top: 8px;
+            }
+            .list-box {
+                padding: 4px;
+            }
+            .list-item {
+                padding: 10px 8px;
+                font-size: 0.8em;
+                margin-bottom: 4px;
+            }
+            .telemetry-bar {
+                padding: 8px 25px;
+            }
+            .val {
+                font-size: 1.2em;
+            }
+            .video-controls {
+                padding: 10px 25px 15px 25px;
+            }
+            .seek-container {
+                margin-bottom: 4px;
+                gap: 10px;
+                font-size: 0.8em;
+            }
+            #seek-bar {
+                height: 4px;
+            }
+            .playback-buttons {
+                gap: 6px;
+            }
+            .playback-buttons select {
+                padding: 6px 12px;
+                font-size: 0.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+ 
+    <!-- 左サイドバー -->
+    <div class="sidebar">
+        <!-- 3つのボタンコントロールグループ -->
+        <div class="controls-group">
+            <span class="section-title">Operations</span>
+            
+            <!-- ① カメラ切り替え (フロント ➔ リア ➔ 地図の3段ループトグル) -->
+            <button id="btn-camera" class="nav-btn" onclick="rotateViewMode()">📸 フロント映像</button>
+            
+            <!-- ② SDカードへ保存 (最初は無効) -->
+            <button id="btn-export" class="export-btn" onclick="exportToSD()" disabled>💾 チェックした動画を保存</button>
+            
+            <!-- ③ ファイル選択 (RAW塊を選ぶ) -->
+            <!-- ④ 第3段階：時間指定スナイプ抽出モジュール -->
+            <div id="time-picker-block" class="time-picker-module">
+                <!-- 「🎯スナップ抽出」と「（時間指定）」を中央寄せ・2行で表示 -->
+                <span class="section-title" style="text-align: center; display: block; line-height: 1.4; font-weight: 800; font-size: 0.85em;">🎯スナップ抽出<br>（時間指定）</span>
+                <div style="font-size: 0.75em; color: var(--warning); font-weight: bold; text-align: center;">
+                    ＊必ず時間指定してください
+                </div>
+                <div>
+                    <span style="font-size: 0.75em; color: var(--text-muted);">開始時間:</span>
+                    <input type="datetime-local" id="time-start" class="time-input" />
+                </div>
+                <div>
+                    <span style="font-size: 0.75em; color: var(--text-muted);">終了時間:</span>
+                    <input type="datetime-local" id="time-end" class="time-input" />
+                </div>
+            </div>
+ 
+            <button id="btn-select" class="select-btn" onclick="runSelectAnimation()">📁 ファイル指定</button>
+        </div>
+ 
+        <!-- 中間のローディングアニメーション -->
+        <div id="loading-panel" class="loading-panel">
+            <div class="spinner"></div>
+            <div id="loading-msg" style="font-size: 0.8em; color: var(--accent); font-family: var(--font-mono);">塊データを解析中...</div>
+        </div>
+ 
+        <!-- 動的に出現する、指でスクロール可能な時間指定リストボックス -->
+        <div id="list-box-container" class="list-box-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="section-title">Playlist<br>(時間指定)</span>
+                <button id="btn-toggle-all" onclick="toggleSelectAll()" style="background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 4px 10px; font-size: 0.75em; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: var(--font-main);">全選択</button>
+            </div>
+            <div id="playlist-container" class="list-box">
+                <!-- ここにスリム化された運行時間ボタンが動的に生成されます -->
+            </div>
+        </div>
+    </div>
+ 
+    <!-- 右メインエリア -->
+    <div class="main-area">
+        <!-- プレースホルダー画面 -->
+        <div id="placeholder" class="video-placeholder">
+            <span class="placeholder-icon">🚖</span>
+            <div class="placeholder-title">現場モニター ENGINE ACTIVE</div>
+            <div style="font-size: 0.85em; color: var(--text-muted); max-width: 420px; line-height: 1.7; padding: 0 20px;">
+                SDカードの塊ファイル（0KBフォルダ）を指定し、開始と終了の時間を上部に入力した上で「ファイル指定」を押してスナップ抽出・再生してください。
+            </div>
+        </div>
+ 
+        <div class="video-container" style="width: 100%; height: 100%; position: relative;">
+            
+            <!-- 🗺️ 動く運行地図 (通常は非表示、3ステップトグルでアクティブ化) -->
+            <div id="map"></div>
+ 
+            <!-- HUD上部 -->
+            <div id="hud-top" class="telemetry-bar">
+                <div class="telemetry-item">
+                    <span class="telemetry-label">TIME</span>
+                    <span class="val" id="disp-time">--:--:--</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">SPEED</span>
+                    <span><span class="val" id="disp-speed">0</span> <span style="font-size: 0.8em; color: var(--text-muted);">km/h</span></span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">GPS (LAT, LON)</span>
+                    <span class="val" id="disp-gps">---.---, ---.---</span>
+                </div>
+            </div>
+ 
+            <video id="player" playsinline autoplay></video>
+ 
+            <!-- HUD下部 -->
+            <div id="hud-bottom" class="video-controls">
+                <div class="seek-container">
+                    <span id="curr-time">0:00</span>
+                    <input type="range" id="seek-bar" value="0" step="0.1">
+                    <span id="total-time">0:00</span>
+                </div>
+                <div class="playback-buttons">
+                    <!-- 早戻し・早送りは画面のYouTube風タップに移行したため、コントロールは速度設定に集約 -->
+                    <select id="speed-select" onchange="changeSpeed(this.value)">
+                        <option value="1.0">1.0x (標準)</option>
+                        <option value="1.25">1.25x</option>
+                        <option value="1.5">1.5x</option>
+                        <option value="1.75">1.75x</option>
+                        <option value="2.0">2.0x</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- フォルダ選択モーダル -->
+    <div id="folder-modal-overlay" class="modal-overlay">
+        <div class="folder-modal">
+            <div class="modal-header">
+                <span class="modal-title">📁 フォルダを選択</span>
+                <button class="modal-close" onclick="closeFolderModal()">×</button>
+            </div>
+            <div id="current-path-display" class="current-path-display">/</div>
+            <div id="folder-list" class="folder-list">
+                <!-- フォルダ一覧がここに入ります -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeFolderModal()">キャンセル</button>
+                <button class="btn-confirm" onclick="confirmFolderSelection()">このフォルダを開く</button>
+            </div>
+        </div>
+    </div>
+ 
+    <script>
+        let currentFiles = [];
+        let currentIndex = -1;
+        let currentCamera = 'front';
+        let currentMode = 'front'; // 'front', 'rear', 'map'
+        let telemetryData = [];
+        let isTransitioning = false;
+        let targetTime = -1;
+        let currentSpeed = 1.0;
+        let isSelectDone = false;
+        let clickTimeout = null;
+        
+        // 地図オブジェクト
+        let map = null;
+        let carMarker = null;
+        
+        const player = document.getElementById('player');
+        const seekBar = document.getElementById('seek-bar');
+        const currTimeDisp = document.getElementById('curr-time');
+        const totalTimeDisp = document.getElementById('total-time');
+        
+        const btnCamera = document.getElementById('btn-camera');
+        const btnExport = document.getElementById('btn-export');
+        const btnSelect = document.getElementById('btn-select');
+        const speedSelect = document.getElementById('speed-select');
+        
+        const loadingPanel = document.getElementById('loading-panel');
+        const listBoxContainer = document.getElementById('list-box-container');
+        const playlistContainer = document.getElementById('playlist-container');
+        
+        const placeholder = document.getElementById('placeholder');
+        const hudTop = document.getElementById('hud-top');
+        const hudBottom = document.getElementById('hud-bottom');
+        const mapDiv = document.getElementById('map');
+        const videoContainer = document.querySelector('.video-container');
+ 
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+ 
+        // 🗺️ 地図 (Leaflet + OpenStreetMap) の初期化
+        function initMap() {
+            if (map) return;
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            });
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+            
+            // クールな光る防犯カメラアイコンピン
+            const carIcon = L.divIcon({
+                html: '<div style="font-size: 28px; filter: drop-shadow(0 0 8px var(--accent));">🚖</div>',
+                className: 'custom-div-icon',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+            
+            carMarker = L.marker([35.6895, 139.6917], { icon: carIcon }).addTo(map);
+        }
+ 
+        // GPS座標のNMEA表記（度分: DDMM.MMMM）を十進法（度数）に極上デコードする関数
+        function parseNmeaCoords(coord_str, is_lon = false) {
+            const val = parseFloat(coord_str);
+            if (isNaN(val) || val === 0) return 0;
+            const deg_len = is_lon ? 3 : 2;
+            const deg = Math.floor(val / 100);
+            const min_val = val - (deg * 100);
+            return deg + (min_val / 60);
+        }
+ 
+        // 📸 フロント ➔ 🎥 リア ➔ 🗺️ 地図の3段ループ切替トグル！
+        function rotateViewMode() {
+            const prevCamera = currentCamera;
+            
+            if (currentMode === 'front') {
+                // フロントからリアへ
+                currentMode = 'rear';
+                currentCamera = 'rear';
+                btnCamera.className = 'nav-btn rear-active';
+                btnCamera.innerText = '🎥 リア映像';
+                mapDiv.style.display = 'none';
+                player.style.display = 'block';
+            } else if (currentMode === 'rear') {
+                // リアから地図へ
+                currentMode = 'map';
+                btnCamera.className = 'nav-btn map-active';
+                btnCamera.innerText = '🗺️ 運行地図 (GPS)';
+                player.style.display = 'none';
+                mapDiv.style.display = 'block';
+                
+                // 地図の初期化を遅延実行（表示されてからサイズ計算させるため）
+                setTimeout(() => {
+                    initMap();
+                    map.invalidateSize();
+                }, 100);
+            } else {
+                // 地図からフロントへ
+                currentMode = 'front';
+                currentCamera = 'front';
+                btnCamera.className = 'nav-btn front-active';
+                btnCamera.innerText = '📸 フロント映像';
+                mapDiv.style.display = 'none';
+                player.style.display = 'block';
+            }
+            
+            // 再生中の動画ソースを切り替え
+            if (currentIndex >= 0 && currentMode !== 'map') {
+                const cTime = player.currentTime;
+                const wasPlaying = !player.paused; // 今再生中かどうかを記憶しておく
+                player.src = `/stream/${currentFiles[currentIndex]}?camera=${currentCamera}`;
+                player.currentTime = cTime;
+                if (wasPlaying) player.play().catch(e => console.log(e));
+            }
+        }
+ 
+        let currentBrowserPath = "";
+ 
+        async function openFolderModal(targetPath = "") {
+            const overlay = document.getElementById('folder-modal-overlay');
+            overlay.style.display = 'flex';
+            
+            try {
+                const res = await fetch(`/api/list_dirs?path=${encodeURIComponent(targetPath)}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert("フォルダの読み込みに失敗しました: " + data.error);
+                    return;
+                }
+                
+                currentBrowserPath = data.current_path;
+                document.getElementById('current-path-display').innerText = currentBrowserPath;
+                
+                const listContainer = document.getElementById('folder-list');
+                listContainer.innerHTML = '';
+                
+                data.items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'folder-item';
+                    div.innerHTML = `<span style="font-size: 1.2em;">📁</span> <span>${item.name}</span>`;
+                    div.onclick = () => {
+                        openFolderModal(item.path);
+                    };
+                    listContainer.appendChild(div);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        
+        function closeFolderModal() {
+            document.getElementById('folder-modal-overlay').style.display = 'none';
+        }
+        
+        async function confirmFolderSelection() {
+            closeFolderModal();
+            const btnSelect = document.getElementById('btn-select');
+            const loadingPanel = document.getElementById('loading-panel');
+            const placeholder = document.getElementById('placeholder');
+            const hudTop = document.getElementById('hud-top');
+            const hudBottom = document.getElementById('hud-bottom');
+            
+            const startInput = document.getElementById('time-start').value;
+            const endInput = document.getElementById('time-end').value;
+            
+            if (startInput && endInput) {
+                // スナイプモード（抽出）
+                await doSnipeExtraction(startInput, endInput, loadingPanel, placeholder, hudTop, hudBottom);
+            } else {
+                alert("⚠️ 警告：データ量が極めて巨大なため、すべての映像をロードするプレビュー機能は廃止されました。\n機器の熱暴走や容量オーバーを防ぐため、必ず「開始時間」と「終了時間」を上部で指定してから「ファイル指定」を押してください。");
+            }
+        }
+        
+        // プレビューモードは熱暴走・ストレージ容量オーバー防止のため完全に廃止されました。
+        
+        async function doSnipeExtraction(startInput, endInput, loadingPanel, placeholder, hudTop, hudBottom) {
+            const startTimeStr = startInput.replace(/[-T:]/g, "") + "00";
+            const endTimeStr = endInput.replace(/[-T:]/g, "") + "00";
+            
+            document.getElementById('loading-msg').innerText = "塊からスナイプ抽出中... (超高速)";
+            loadingPanel.style.display = 'flex';
+            
+            try {
+                const res = await fetch('/api/extract_by_time', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        raw_path: currentBrowserPath,
+                        start_time: startTimeStr,
+                        end_time: endTimeStr
+                    })
+                });
+                
+                const data = await res.json();
+                loadingPanel.style.display = 'none';
+                
+                if (!data.success) {
+                    alert("抽出に失敗しました: " + data.error);
+                    return;
+                }
+                
+                alert(`スナイプ抽出完了！\n${data.extracted} 個の動画データを一撃で抜き出しました。`);
+                
+                placeholder.style.display = 'none';
+                player.style.opacity = '1';
+                hudTop.style.opacity = '1';
+                hudBottom.style.opacity = '1';
+                isSelectDone = true;
+                
+                listBoxContainer.style.display = 'flex';
+                loadPlaylist();
+            } catch(e) {
+                loadingPanel.style.display = 'none';
+                console.error(e);
+                alert("エラーが発生しました: " + e);
+            }
+        }
+ 
+        function runSelectAnimation() {
+            const startTimeInput = document.getElementById('time-start').value;
+            const endTimeInput = document.getElementById('time-end').value;
+            
+            if (!startTimeInput || !endTimeInput) {
+                alert("⚠️ 警告：データ量が極めて巨大なため、すべての映像をロードするプレビュー機能は廃止されました。\n機器の熱暴走や容量オーバーを防ぐため、必ず「開始時間」と「終了時間」を上部で指定してから「ファイル指定」を押してください。");
+                return;
+            }
+ 
+            // フルスクリーン化されている場合、ボタンタップのタイミングで横画面ロックを再試行（確実化）
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(e => console.log(e));
+            }
+            
+            const btnSelect = document.getElementById('btn-select');
+            btnSelect.style.transform = 'scale(0.95)';
+            setTimeout(async () => {
+                btnSelect.style.transform = 'scale(1)';
+                openFolderModal(""); // 空文字を渡してデフォルトパスから開始
+            }, 200);
+        }
+ 
+        // ファイル名を表示リストにそのまま表示！
+        function renderPlaylist() {
+            playlistContainer.innerHTML = '';
+            
+            currentFiles.forEach((filename, index) => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.id = 'item-' + index;
+                
+                // 「.dat」を取り除いたスッキリした名前
+                const cleanName = filename.replace('.dat', '');
+                
+                div.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                        <div style="display: flex; align-items: center;">
+                            <input type="checkbox" id="chk-${index}" class="save-checkbox" onclick="event.stopPropagation(); updateSelectAllButtonText();">
+                            <span style="margin-left: 10px;">📼 ${cleanName}</span>
+                        </div>
+                    </div>
+                `;
+                
+                div.onclick = () => playVideo(index);
+                playlistContainer.appendChild(div);
+            });
+            // プレイリスト描画時に全選択ボタンの状態を同期させる
+            updateSelectAllButtonText();
+        }               
+ 
+        // すべてのチェックボックスを一括選択・全解除する極上のトグル関数
+        function toggleSelectAll() {
+            const checkboxes = document.querySelectorAll('.save-checkbox');
+            if (!checkboxes.length) return;
+            
+            // 一つでもチェックが外れているものがあれば「全選択」、すべてチェック済みなら「全解除」を行う
+            let hasUnchecked = Array.from(checkboxes).some(chk => !chk.checked);
+            
+            checkboxes.forEach(chk => {
+                chk.checked = hasUnchecked;
+            });
+            
+            updateSelectAllButtonText();
+        }
+ 
+        // 🏷️ チェックボックスの選択状況に応じて「全選択 / 全解除」ボタンの表示を自動切り替えする関数
+        function updateSelectAllButtonText() {
+            const btnToggleAll = document.getElementById('btn-toggle-all');
+            if (!btnToggleAll) return;
+            
+            const checkboxes = document.querySelectorAll('.save-checkbox');
+            if (checkboxes.length === 0) {
+                btnToggleAll.innerText = "全選択";
+                return;
+            }
+            
+            const allChecked = Array.from(checkboxes).every(chk => chk.checked);
+            if (allChecked) {
+                btnToggleAll.innerText = "全解除";
+            } else {
+                btnToggleAll.innerText = "全選択";
+            }
+        }
+ 
+        async function loadPlaylist() {
+            try {
+                const response = await fetch('/api/videos');
+                const data = await response.json();
+                if (data.videos && data.videos.length > 0) {
+                    // 若い順（古い日付・時間が上に来るように昇順ソート）
+                    currentFiles = data.videos.sort(); 
+                    renderPlaylist();
+                    document.getElementById('btn-export').disabled = false; // データを読み込んだら保存ボタンを有効化
+                    playVideo(0); 
+                } else {
+                    currentFiles = [];
+                    renderPlaylist();
+                }
+            } catch (e) {}
+        }
+ 
+        async function fetchTelemetry(filename) {
+            try {
+                const res = await fetch(`/api/telemetry?file=${encodeURIComponent(filename)}`);
+                telemetryData = await res.json();
+            } catch (e) { telemetryData = []; }
+        }
+ 
+        // アプリ起動時に強制的に横画面をロックするフォールバック
+        document.addEventListener('DOMContentLoaded', () => {
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(e => console.log('Orientation lock failed or not supported:', e));
+            }
+            
+            // 🕒 開始時間を入力した時に、自動的に終了時間に「5分後の時間」をとりあえずセットする仕組み
+            const timeStartInput = document.getElementById('time-start');
+            const timeEndInput = document.getElementById('time-end');
+            
+            timeStartInput.addEventListener('change', () => {
+                if (timeStartInput.value) {
+                    // 開始時間を日付オブジェクトにパース
+                    const startDate = new Date(timeStartInput.value);
+                    if (!isNaN(startDate.getTime())) {
+                        // 5分加算 (5分 * 60秒 * 1000ミリ秒)
+                        const endDate = new Date(startDate.getTime() + 5 * 60 * 1000);
+                        
+                        // YYYY-MM-DDTHH:MM 形式の文字列を作成して代入
+                        const year = endDate.getFullYear();
+                        const month = String(endDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(endDate.getDate()).padStart(2, '0');
+                        const hours = String(endDate.getHours()).padStart(2, '0');
+                        const minutes = String(endDate.getMinutes()).padStart(2, '0');
+                        
+                        timeEndInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+                    }
+                }
+            });
+        });
+ 
+        function playVideo(index, keepTime = false) {
+            if (index < 0 || index >= currentFiles.length) return;
+            isTransitioning = false;
+            
+            if (currentIndex >= 0) {
+                document.getElementById('item-' + currentIndex)?.classList.remove('playing');
+            }
+            currentIndex = index;
+            const activeItem = document.getElementById('item-' + currentIndex);
+            if (activeItem) {
+                activeItem.classList.add('playing');
+                activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+ 
+            const filename = currentFiles[index];
+            const currentTime = keepTime ? player.currentTime : 0;
+            targetTime = keepTime ? currentTime : -1;
+            
+            if (!keepTime) fetchTelemetry(filename);
+            
+            player.style.opacity = "0.5";
+            player.src = `/stream/${encodeURIComponent(filename)}?camera=${currentCamera}`;
+            player.playbackRate = currentSpeed;
+            player.play().catch(e => console.log(e));
+        }
+ 
+        setInterval(() => {
+            if (targetTime >= 0 && player.readyState >= 1) {
+                player.currentTime = targetTime;
+                player.style.opacity = "1";
+                targetTime = -1;
+            }
+        }, 50);
+ 
+        // 💾 SDカードへ保存 (チェックされた動画を結合してダウンロード保存)
+        async function exportToSD() {
+            const checkboxes = document.querySelectorAll('.save-checkbox');
+            const selectedIndexes = [];
+            
+            checkboxes.forEach((chk, idx) => {
+                if (chk.checked) selectedIndexes.push(idx);
+            });
+            
+            if (selectedIndexes.length === 0) {
+                alert("保存したい動画のチェックボックスにチェックを入れてください。");
+                return;
+            }
+            
+            // 連続チェックのバリデーション
+            selectedIndexes.sort((a, b) => a - b);
+            let isContinuous = true;
+            for (let i = 1; i < selectedIndexes.length; i++) {
+                if (selectedIndexes[i] - selectedIndexes[i-1] !== 1) {
+                    isContinuous = false;
+                    break;
+                }
+            }
+            if (!isContinuous) {
+                alert("保存するファイルは連続した時間（チェックが連続）である必要があります。\nチェックが抜けている箇所がないか確認してください。");
+                return;
+            }
+            
+            // 出力ファイル名の生成
+            const firstFile = currentFiles[selectedIndexes[0]].replace('.dat', '');
+            const lastFile = currentFiles[selectedIndexes[selectedIndexes.length - 1]].replace('.dat', '');
+            
+            let out_filename = "";
+            if (selectedIndexes.length === 1) {
+                out_filename = `${firstFile}_${currentCamera}.mp4`;
+            } else {
+                const firstParts = firstFile.split('_');
+                const lastParts = lastFile.split('_');
+                
+                // 例: 20250903_032839
+                const startDate = firstParts[0];
+                const startTime = firstParts[1] || "";
+                const endTime = lastParts[1] || "";
+                
+                out_filename = `${startDate}_${startTime}-${endTime}_${currentCamera}.mp4`;
+            }
+            
+            // 結合するファイルのリストを作成
+            const filesToMerge = selectedIndexes.map(idx => currentFiles[idx]);
+            
+            // ==========================================
+            // 🗺️ 地図モードの場合は「ルートデータ(KML/CSV)」として出力
+            // ==========================================
+            if (currentMode === 'map') {
+                const format = prompt("ルートデータを保存します。\n保存形式を「kml」または「csv」で入力してください。", "kml");
+                if (format === null) return; // キャンセルされた場合
+                const ext = format.toLowerCase().trim() === 'csv' ? 'csv' : 'kml';
+                
+                // ファイル名の再設定 (動画用の_frontなどを外す)
+                let route_filename = "";
+                if (selectedIndexes.length === 1) {
+                    route_filename = `${firstFile}.${ext}`;
+                } else {
+                    const firstParts = firstFile.split('_');
+                    const lastParts = lastFile.split('_');
+                    route_filename = `${firstParts[0]}_${firstParts[1] || ""}-${lastParts[1] || ""}.${ext}`;
+                }
+                
+                const loadingPanel = document.getElementById('loading-panel');
+                document.getElementById('loading-msg').innerText = "ルートデータを生成中... しばらくお待ちください";
+                loadingPanel.style.display = 'flex';
+                
+                try {
+                    let allPoints = [];
+                    // 順番にGPSデータを取得して結合
+                    for (let filename of filesToMerge) {
+                        const res = await fetch(`/api/telemetry?file=${encodeURIComponent(filename)}`);
+                        const data = await res.json();
+                        // 座標データが存在するものだけを抽出
+                        const validPoints = data.filter(p => p.lat && p.lon && p.lat !== "" && p.lon !== "");
+                        allPoints.push(...validPoints);
+                    }
+                    
+                    let fileContent = "";
+                    if (ext === 'csv') {
+                        // CSV形式の生成 (Googleマイマップでインポート可能)
+                        fileContent = "Time,Latitude,Longitude,Speed(km/h)\n";
+                        allPoints.forEach(p => {
+                            const decLat = parseNmeaCoords(p.lat, false);
+                            const decLon = parseNmeaCoords(p.lon, true);
+                            fileContent += `${p.time},${decLat.toFixed(6)},${decLon.toFixed(6)},${p.speed}\n`;
+                        });
+                    } else {
+                        // KML形式の生成 (ルートを線として描画するのに最適)
+                        let coordsText = "";
+                        allPoints.forEach(p => {
+                            const decLat = parseNmeaCoords(p.lat, false);
+                            const decLon = parseNmeaCoords(p.lon, true);
+                            coordsText += `${decLon.toFixed(6)},${decLat.toFixed(6)},0\n`;
+                        });
+                        
+                        fileContent = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${route_filename}</name>
+    <Style id="routeStyle">
+      <LineStyle>
+        <color>ff0000ff</color> <!-- 赤色の線 -->
+        <width>5</width>
+      </LineStyle>
+    </Style>
+    <Placemark>
+      <name>走行ルート</name>
+      <styleUrl>#routeStyle</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>
+${coordsText}
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>`;
+                    }
+                    
+                    loadingPanel.style.display = 'none';
+                    
+                    // ブラウザ上でテキストファイルを生成してダウンロード
+                    const blob = new Blob([fileContent], { type: ext === 'csv' ? 'text/csv' : 'application/vnd.google-earth.kml+xml' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = route_filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                } catch (error) {
+                    loadingPanel.style.display = 'none';
+                    alert("ルートデータの生成中にエラーが発生しました。");
+                    console.error(error);
+                }
+                
+                return; // ここで処理を終了し、動画の保存処理には進まない
+            }
+            
+            // ==========================================
+            // 🎥 フロント/リアモードの場合は「動画」として出力
+            // ==========================================
+            // ローディング画面の表示
+            const loadingPanel = document.getElementById('loading-panel');
+            document.getElementById('loading-msg').innerText = "ファイルを結合中... しばらくお待ちください";
+            loadingPanel.style.display = 'flex';
+            
+            try {
+                const response = await fetch('/api/export_merged', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        files: filesToMerge,
+                        camera: currentCamera,
+                        out_filename: out_filename
+                    })
+                });
+                
+                const data = await response.json();
+                loadingPanel.style.display = 'none'; // ロード画面を隠す
+                
+                if (data.success) {
+                    // ダウンロードを実行
+                    const a = document.createElement('a');
+                    a.href = data.url;
+                    a.download = out_filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } else {
+                    alert("ファイルの結合中にエラーが発生しました: " + data.error);
+                }
+            } catch (error) {
+                loadingPanel.style.display = 'none';
+                alert("サーバーとの通信に失敗しました。");
+                console.error(error);
+            }
+        }
+        
+        function seekVideo(seconds) {
+            let newTime = player.currentTime + seconds;
+            if (newTime < 0) newTime = 0;
+            if (newTime > player.duration) newTime = player.duration;
+            player.currentTime = newTime;
+        }
+ 
+        function changeSpeed(speed) {
+            currentSpeed = parseFloat(speed);
+            player.playbackRate = currentSpeed;
+        }
+ 
+        // 📱 YouTube風 ダブルタップ/ダブルクリックジェスチャー操作の実装！
+        videoContainer.addEventListener('click', (e) => {
+            // HUD下部、HUD上部、サイドバー、地図、またはプレースホルダー上でのタップはダブルタップ処理を無視する
+            if (e.target.closest('#hud-bottom') || 
+                e.target.closest('#hud-top') || 
+                e.target.closest('.sidebar') || 
+                e.target.closest('#map') || 
+                e.target.closest('#placeholder')) {
+                return;
+            }
+            
+            const rect = videoContainer.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const isRightSide = clickX > (rect.width / 2);
+            
+            if (clickTimeout) {
+                // 【ダブルタップ検知！】
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
+                
+                if (isRightSide) {
+                    seekVideo(5);
+                    showRipple("▶▶ 5秒進む");
+                } else {
+                    seekVideo(-5);
+                    showRipple("◀◀ 5秒戻る");
+                }
+            } else {
+                // シングルタップ待機
+                clickTimeout = setTimeout(() => {
+                    clickTimeout = null;
+                    if (isSelectDone) {
+                        if (player.paused) player.play();
+                        else player.pause();
+                    }
+                }, 220);
+            }
+        });
+ 
+        // タップ時に画面中央に浮かび上がるサイバーなインジケーター（Ripple）の演出
+        function showRipple(text) {
+            const ripple = document.createElement('div');
+            ripple.innerText = text;
+            ripple.style.position = 'absolute';
+            ripple.style.top = '50%';
+            ripple.style.left = '50%';
+            ripple.style.transform = 'translate(-50%, -50%)';
+            ripple.style.background = 'rgba(10, 15, 30, 0.9)';
+            ripple.style.color = 'var(--accent)';
+            ripple.style.border = '1px solid var(--accent)';
+            ripple.style.padding = '12px 24px';
+            ripple.style.borderRadius = '30px';
+            ripple.style.fontFamily = 'var(--font-mono)';
+            ripple.style.fontSize = '1.2em';
+            ripple.style.fontWeight = 'bold';
+            ripple.style.zIndex = '999';
+            ripple.style.pointerEvents = 'none';
+            ripple.style.boxShadow = '0 0 20px var(--accent-glow)';
+            ripple.style.transition = 'opacity 0.4s, transform 0.4s';
+            
+            videoContainer.appendChild(ripple);
+            
+            setTimeout(() => {
+                ripple.style.opacity = '0';
+                ripple.style.transform = 'translate(-50%, -50%) scale(1.15)';
+                setTimeout(() => ripple.remove(), 400);
+            }, 250);
+        }
+ 
+        seekBar.addEventListener('input', () => { player.currentTime = seekBar.value; });
+ 
+        player.ontimeupdate = () => {
+            const t = player.currentTime;
+            
+            if (player.duration) {
+                seekBar.max = player.duration;
+                seekBar.value = t;
+                currTimeDisp.innerText = formatTime(t);
+                totalTimeDisp.innerText = formatTime(player.duration);
+            }
+            
+            if (player.duration > 0 && player.duration - t < 0.5) {
+                if (!isTransitioning && currentIndex + 1 < currentFiles.length) {
+                    isTransitioning = true;
+                    setTimeout(() => { playVideo(currentIndex + 1); }, 100);
+                }
+            }
+ 
+            if (!telemetryData || telemetryData.length === 0) return;
+            
+            let closest = telemetryData[0];
+            for (let i = 0; i < telemetryData.length; i++) {
+                if (telemetryData[i].offset <= t) closest = telemetryData[i];
+                else break;
+            }
+            
+            if (closest) {
+                document.getElementById('disp-time').innerText = closest.time;
+                document.getElementById('disp-speed').innerText = closest.speed;
+                
+                // 📡 NMEA度分（DDMM.MMMM）を十進数（度）に極上デコードしてHUDに表示！
+                const latDec = parseNmeaCoords(closest.lat, false);
+                const lonDec = parseNmeaCoords(closest.lon, true);
+                if (latDec !== 0 && lonDec !== 0) {
+                    document.getElementById('disp-gps').innerText = latDec.toFixed(5) + ", " + lonDec.toFixed(5);
+                } else {
+                    document.getElementById('disp-gps').innerText = "---.---, ---.---";
+                }
+                
+                // 🗺️ 現在地が地図モードなら、 Leaflet 上の防犯カメラピンを滑らかに移動追従させる！
+                if (currentMode === 'map' && latDec !== 0 && lonDec !== 0) {
+                    const newPos = [latDec, lonDec];
+                    if (carMarker) carMarker.setLatLng(newPos);
+                    if (map) map.setView(newPos, 16);
+                }
+            }
+        };
+ 
+        player.addEventListener('loadeddata', () => { player.style.opacity = "1"; });
+ 
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registered', reg))
+                    .catch(err => console.error('Service Worker registration failed', err));
+            });
+        }
+    </script>
+</body>
+</html>
