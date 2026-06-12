@@ -94,9 +94,9 @@ I would appreciate advice on:
 
 ## 👤 About / 作者について
 
-I am not a professional engineer.
+I'm not a professional engineer. I've only been studying AI for 14 days. I can't write any code and I don't understand it at all, which is why I came here.
 
-私はプロのエンジニアではありません。
+私はプロのエンジニアではありません。AIを勉強し始めてまだ14日目です。コードも一切書けないしわからないからここにきました
 
 This project was created to better understand real-world operational recording data.
 
