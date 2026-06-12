@@ -1,44 +1,123 @@
 # proprietary-cam-parser
 
-## Current Status
+Experimental viewer and parser for proprietary recording data with GPS synchronization, developed on a rooted Pixel 6a.
 
-✅ FVFS parsing implemented
+---
 
-✅ Video extraction working
+## 🚀 Overview / 概要
 
-✅ GPS extraction working
+This project is an experimental tool for parsing proprietary camera-like recording data and synchronizing it with GPS information.
 
-✅ Pixel 6a deployment working
+このプロジェクトは、独自形式の録画データを解析し、GPS情報と同期して扱うための実験的ツールです。
 
-⚠ Audio reconstruction contains noise
+It aims to unify video, audio, and GPS into a single timeline view.
 
-⚠ Need validation with additional datasets
+映像・音声・GPSを1つの時系列として統合することを目的としています。
 
-⚠ Performance optimization required
+---
 
-## Help Wanted
+## 📊 Current Status / 現在の状態
 
-I am a beginner who started learning AI development recently.
+✅ FVFS parsing implemented / FVFSパース実装済み  
+✅ Video extraction working / 映像抽出成功  
+✅ GPS extraction working / GPS抽出成功  
+✅ Android execution confirmed / Android実機動作確認済み  
 
-I would appreciate advice regarding:
+⚠ Audio reconstruction contains noise / 音声再構築にノイズあり  
+⚠ Data structure not fully understood / 構造解析は未完了  
+⚠ Performance optimization required / 最適化が必要  
+⚠ Further validation needed / 追加検証が必要  
 
-- Audio reconstruction
-- GPS synchronization
-- Performance optimization
-- Testing and validation
+---
 
-## What I currently believe
+## 🔍 What I currently believe / 現在の仮説
 
-After approximately 100 hours of experimentation and testing, my current understanding is:
+🧠 These are experimental findings based on ~100 hours of testing.
 
-* Video streams appear to be stored inside RIFF-like chunks.
-* GPS data (location, speed, UTC timestamps) can be extracted and synchronized.
-* Audio appears to be fragmented and may exist in multiple locations.
-* Some index/metadata information may exist near the footer region.
-* Day-shift and night-shift recordings appear to be mixed together.
+🧠 約100時間の検証から得られた実験的な仮説です。
 
-Important:
+* Video streams may be stored in RIFF-like chunk structures  
+　映像はRIFF風のチャンク構造で保存されている可能性
 
-These observations are based on empirical testing and are not yet fully verified.
+* GPS data (location, speed, UTC timestamps) can be extracted and synchronized  
+　GPSデータは抽出・同期可能
 
-I would greatly appreciate validation from developers with reverse-engineering experience.
+* Audio appears fragmented across multiple locations  
+　音声は複数箇所に分散している可能性
+
+* Metadata may exist near file footer regions  
+　メタデータはファイル末尾付近に存在する可能性
+
+* Day/night recordings may be mixed together  
+　昼夜の録画データが混在している可能性
+
+⚠ These are not fully verified / これらは未検証です
+
+---
+
+## 🧪 Help Wanted / 協力依頼
+
+🙏 I am a beginner in AI-assisted development.
+
+🙏 私はAI支援開発を始めたばかりの初心者です。
+
+I would appreciate advice on:
+
+以下の分野でアドバイスをいただけると助かります：
+
+- 🎧 Audio reconstruction / 音声再構築  
+- 🛰 GPS synchronization / GPS同期  
+- ⚙ Performance optimization / パフォーマンス改善  
+- 🧪 Testing and validation / テスト・検証  
+
+---
+
+## 🏗 Architecture / 構造
+
+📥 Input data  
+⬇  
+🧩 Parser  
+⬇  
+🎬 Video extraction + 🛰 GPS extraction + 🎧 Audio analysis (WIP)  
+⬇  
+🖥 Unified viewer  
+
+---
+
+## ⚙ Environment / 環境
+
+- 📱 Rooted Pixel 6a / root化済みPixel 6a  
+- 🤖 Android execution environment / Android実行環境  
+- 🧠 AI-assisted development / AI支援開発  
+
+---
+
+## 👤 About / 作者について
+
+I am not a professional engineer.
+
+私はプロのエンジニアではありません。
+
+This project was created to better understand real-world operational recording data.
+
+このプロジェクトは現場の記録データをより正確に理解するために作られました。
+
+Development is done through iterative AI-assisted experimentation.
+
+AIを使った試行錯誤ベースで開発しています。
+
+---
+
+## ⚠ Disclaimer / 注意
+
+This project is experimental and may include incorrect assumptions.
+
+本プロジェクトは実験的であり、誤った仮説を含む可能性があります。
+
+---
+
+## 🤝 Contributing / 協力
+
+💬 Feedback from reverse engineering or data parsing experience is welcome.
+
+💬 リバースエンジニアリングやデータ解析経験者からのフィードバックを歓迎します。
